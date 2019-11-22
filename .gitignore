@@ -1,3 +1,8 @@
+#ignore python environment
+ecg_env
+#ignore .zip files
+*.zip
+
 /data
 /cache
 /saved
