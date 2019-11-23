@@ -1,4 +1,3 @@
-from __future__ import print_function
 from __future__ import division
 from __future__ import absolute_import
 
@@ -27,7 +26,7 @@ def get_filename_for_saving(save_dir):
     return os.path.join(save_dir,
             "{val_loss:.3f}-{val_accuracy:.3f}-{epoch:03d}-{loss:.3f}-{accuracy:.3f}.hdf5")
 
-def train(args, params):
+def train(args, params, multi_gpu=True):
 
     print("Loading training set...")
     train = load.load_dataset(params['train'])
@@ -61,7 +60,16 @@ def train(args, params):
         filepath=get_filename_for_saving(save_dir),
         save_best_only=False)
 
-    batch_size = params.get("batch_size", 32)
+    batch_size = params.get("batch_size", 256)
+
+    if multi_gpu:
+        from keras.utils import multi_gpu_model
+        from keras import backend
+        num_gpus = len(backend.tensorflow_backend._get_available_gpus())
+        print(f"training on {num_gpus} gpus with batch_size {batch_size}") 
+        parallel_model = multi_gpu_model(model, gpus=num_gpus)
+        network.add_compile(parallel_model,**params)
+        model = parallel_model
 
     if params.get("generator", False):
         train_gen = load.data_generator(batch_size, preproc, *train)
