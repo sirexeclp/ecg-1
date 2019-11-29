@@ -60,13 +60,14 @@ def train(args, params, multi_gpu=True):
         filepath=get_filename_for_saving(save_dir),
         save_best_only=False)
 
-    batch_size = params.get("batch_size", 256)
+    batch_size = params.get("batch_size", 32)
 
     if multi_gpu:
         from keras.utils import multi_gpu_model
         from keras import backend
         num_gpus = len(backend.tensorflow_backend._get_available_gpus())
-        print(f"training on {num_gpus} gpus with batch_size {batch_size}") 
+        batch_size *= num_gpus
+        print(f"training on {num_gpus} gpus with batch_size {batch_size}, μ-batch™_size {batch_size//num_gpus}")
         parallel_model = multi_gpu_model(model, gpus=num_gpus)
         network.add_compile(parallel_model,**params)
         model = parallel_model
