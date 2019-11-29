@@ -1,3 +1,9 @@
+*.dat
+*.atr
+*.npy
+*.hea
+*.pkl
+*.tar.gz
 #ignore python environment
 ecg_env
 #ignore .zip files
