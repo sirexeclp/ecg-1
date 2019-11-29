@@ -1,13 +1,14 @@
 from __future__ import print_function
 
-import cPickle as pickle
+import pickle
 import glob
 import numpy as np
 import os
 import subprocess
+import wfdb
+import tqdm
 
-WFDB = "/deep/group/med/tools/wfdb-10.5.24/build/bin/"
-DATA = "/deep/group/med/mitdb"
+DATA = "./"
 
 def extract_wave(idx):
     """
@@ -16,10 +17,10 @@ def extract_wave(idx):
     is the sample number and the second two are the first and second channel
     respectively.
     """
-    rdsamp = os.path.join(WFDB, 'rdsamp')
-    output = subprocess.check_output([rdsamp, '-r', idx], cwd=DATA)
-    data = np.fromstring(output, dtype=np.int32, sep=' ')
-    return data.reshape((-1, 3))
+    samp, ann = wfdb.rdsamp(idx)
+    samp_no = np.arange(ann["sig_len"])
+    data = np.concatenate([np.expand_dims(samp_no, axis=1), samp], axis=1)
+    return data
 
 def extract_annotation(idx):
     """
@@ -28,11 +29,8 @@ def extract_annotation(idx):
     The Aux is optional, it could be left empty. Type is the beat type and Aux
     is the transition label.
     """
-    rdann = os.path.join(WFDB, 'rdann')
-    output = subprocess.check_output([rdann, '-r', idx, '-a', 'atr'], cwd=DATA)
-    labels = (line.split() for line in output.strip().split("\n"))
-    labels = [(l[0], int(l[1]), l[2], l[6] if len(l) == 7 else None)
-                for l in labels]
+    ann = wfdb.rdann(idx, extension="atr")
+    labels = [ann.sample/ann.fs, ann.sample, ann.symbol, ann.subtype, ann.chan, ann.num, ann.aux_note]
     return labels
 
 def extract(idx):
@@ -50,13 +48,14 @@ def save(example, idx):
     files are saved in the same place as the raw data.
     """
     np.save(os.path.join(DATA, idx), example[0])
-    with open(os.path.join(DATA, "{}.pkl".format(idx)), 'w') as fid:
+    with open(os.path.join(DATA, "{}.pkl".format(idx)), 'wb') as fid:
         pickle.dump(example[1], fid)
 
 if __name__ == "__main__":
     files = glob.glob(os.path.join(DATA, "*.dat"))
     idxs = [os.path.basename(f).split(".")[0] for f in files]
-    for idx in idxs:
+    for idx in tqdm.tqdm(idxs):
         example = extract(idx)
         save(example, idx)
-        print("Example {}".format(idx))
+        tqdm.tqdm.write("Example {}".format(idx))
+
