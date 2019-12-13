@@ -1,13 +1,13 @@
-from keras import backend as K
+from tensorflow.keras import backend as K
 
 def _bn_relu(layer, dropout=0, **params):
-    from keras.layers import BatchNormalization
-    from keras.layers import Activation
+    from tensorflow.keras.layers import BatchNormalization
+    from tensorflow.keras.layers import Activation
     layer = BatchNormalization()(layer)
     layer = Activation(params["conv_activation"])(layer)
 
     if dropout > 0:
-        from keras.layers import Dropout
+        from tensorflow.keras.layers import Dropout
         layer = Dropout(params["conv_dropout"])(layer)
 
     return layer
@@ -18,7 +18,7 @@ def add_conv_weight(
         num_filters,
         subsample_length=1,
         **params):
-    from keras.layers import Conv1D 
+    from tensorflow.keras.layers import Conv1D 
     layer = Conv1D(
         filters=num_filters,
         kernel_size=filter_length,
@@ -45,9 +45,9 @@ def resnet_block(
         subsample_length,
         block_index,
         **params):
-    from keras.layers import Add 
-    from keras.layers import MaxPooling1D
-    from keras.layers.core import Lambda
+    from tensorflow.keras.layers import Add 
+    from tensorflow.keras.layers import MaxPooling1D
+    from tensorflow.keras.layers import Lambda
 
     def zeropad(x):
         y = K.zeros_like(x)
@@ -105,13 +105,13 @@ def add_resnet_layers(layer, **params):
     return layer
 
 def add_output_layer(layer, **params):
-    from keras.layers.core import Dense, Activation
-    from keras.layers.wrappers import TimeDistributed
+    from tensorflow.keras.layers import Dense, Activation
+    from tensorflow.keras.layers import TimeDistributed
     layer = TimeDistributed(Dense(params["num_categories"]))(layer)
     return Activation('softmax')(layer)
 
 def add_compile(model, **params):
-    from keras.optimizers import Adam
+    from tensorflow.keras.optimizers import Adam
     optimizer = Adam(
         lr=params["learning_rate"],
         clipnorm=params.get("clipnorm", 1))
@@ -121,8 +121,8 @@ def add_compile(model, **params):
                   metrics=['accuracy'])
 
 def build_network(**params):
-    from keras.models import Model
-    from keras.layers import Input
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.layers import Input
     inputs = Input(shape=params['input_shape'],
                    dtype='float32',
                    name='inputs')
