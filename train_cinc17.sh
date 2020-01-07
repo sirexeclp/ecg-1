@@ -1,1 +1,1 @@
-python ecg/train.py examples/cinc17/config.json -e cinc17
+python ecg/train.py examples/cinc17/config.json -e cinc17 $@
