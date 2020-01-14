@@ -13,6 +13,8 @@ import time
 import network
 import load
 import util
+import json
+from datetime import datetime
 
 MAX_EPOCHS = 100
 
@@ -61,6 +63,24 @@ def train(args, params):
         filepath=get_filename_for_saving(save_dir),
         save_best_only=False)
 
+    timestamp_log = open(f"timestamp_log{str(datetime.now())}.csv","w",buffering=1)
+    timestamp_log.write(f"timestamp,event,data\n")
+
+    def train_cb(logs):
+        #print("log begin")
+        timestamp_log.write(f"{str(datetime.now())},train_begin,\n")
+
+    def epoch_cb(epoch,logs):
+        #print("log begin_epoch")
+        timestamp_log.write(f"{str(datetime.now())},epoch_begin,{epoch}\n")
+
+    logger = tensorflow.keras.callbacks.LambdaCallback(
+                on_epoch_begin=epoch_cb ,
+                on_epoch_end=lambda epoch, logs: timestamp_log.write(f"{str(datetime.now())},epoch_end,{epoch}\n"),
+                on_train_begin=train_cb,
+                on_train_end=lambda logs: timestamp_log.write(f"{str(datetime.now())},train_end,\n"),
+                on_batch_begin=lambda epoch, logs: timestamp_log.write(f"{str(datetime.now())},batch_begin,{epoch}\n")   )
+
     batch_size = params.get("batch_size", 32)
 
     if args.multi_gpu:
@@ -90,7 +110,7 @@ def train(args, params):
             epochs=MAX_EPOCHS,
             validation_data=dev_gen,
             validation_steps=int(len(dev[0]) / batch_size),
-            callbacks=[checkpointer, reduce_lr, stopping])
+            callbacks=[checkpointer, reduce_lr, stopping, logger])
     else:
         train_x, train_y = preproc.process(*train)
         dev_x, dev_y = preproc.process(*dev)
@@ -99,7 +119,9 @@ def train(args, params):
             batch_size=batch_size,
             epochs=MAX_EPOCHS,
             validation_data=(dev_x, dev_y),
-            callbacks=[checkpointer, reduce_lr, stopping])
+            callbacks=[checkpointer, reduce_lr, stopping, logger])
+
+    timestamp_log.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

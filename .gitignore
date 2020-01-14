@@ -9,6 +9,8 @@ ecg_env
 #ignore .zip files
 *.zip
 
+wfdb-10.6.2/
+/dataloader
 /data
 /cache
 /saved

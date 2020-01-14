@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.3.0
+#       jupytext_version: 1.3.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -14,20 +14,22 @@
 # ---
 
 # %%
-os.chdir("ecg")
-import keras as keras
+import sys,os
+#os.chdir("ecg")
+#import keras as keras
 import tensorflow as tf
 import json
 import load
 import network
-import tensorflow_federated as tff
 from tensorflow.keras.optimizers import Adam
-import sys,os
 import numpy as np
 import collections
 # %load_ext autoreload
 # %autoreload 2
-os.chdir('../')
+os.chdir("/workspace/telemed5000/ecg/")
+
+# %%
+tf.keras.__version__
 
 # %%
 data_json, model_path = "examples/cinc17/dev.json","../saved/cinc17/1575022999-481/0.384-0.890-019-0.301-0.898.hdf5"
@@ -48,58 +50,38 @@ params.update({
     "input_shape": [None, 1],
     "num_categories": len(preproc.classes)
 })
-
-model = network.build_network(**params)
+with tf.device('/gpu:3'):
+    model = network.build_network(**params)
 
 # %%
 train_x, train_y = preproc.process(*train)
 dev_x, dev_y = preproc.process(*dev)
 
 # %%
-NUM_CLIENTS = 10
-NUM_EPOCHS = 10
-BATCH_SIZE = 20
-SHUFFLE_BUFFER = 500
+train_y.shape
 
-def preprocess(dataset):
+# %%
+model.summary()
 
-  def element_fn(element):
-    return collections.OrderedDict([
-        ('x', train_x),
-        ('y', train_y),
-    ])
+# %%
+with tf.device('/gpu:3'):
+    optimizer = Adam(
+            lr=params["learning_rate"],
+            clipnorm=params.get("clipnorm", 1))
 
-  return dataset.repeat(NUM_EPOCHS).map(element_fn).shuffle(
-      SHUFFLE_BUFFER).batch(BATCH_SIZE)
+    model.compile(loss='categorical_crossentropy',
+                      optimizer=optimizer,
+                      metrics=['accuracy'])
+
+# %%
+with tf.device('/gpu:3'):
+    model.fit(train_x, train_y)
+
+# %%
+model.get_weights()
 
 
 # %%
-class FederatedDataLoader:
-    
-    def __init__(self, data_json, clients=10):
-        self.allData = load.load_dataset(data_json)
-        self.clients = clients
-        self.groupClientData()
-    
-    def clientData(self, index):
-        return self.clientsData[index]
-    
-    def groupClientData(self):
-        self.clientsData = []
-        xSplit = self.splitArray(self.allData[0])
-        ySplit = self.splitArray(self.allData[1])
-        
-        for index in range(self.clients):
-            self.clientsData.append([xSplit[index], ySplit[index]])
-
-    def splitArray(self, array):
-        splitLen = len(array)/self.clients
-        return np.array_split(array, splitLen)
-loader = FederatedDataLoader("examples/cinc17/dev.json")
-
-# %%
-loader.clientData(0)
-
 
 # %%
 def preprocess(dataset):
@@ -120,6 +102,24 @@ preprocessed_example_dataset = preprocess(tf.data.Dataset.from_generator(lambda:
 # %%
 sample_batch = tf.nest.map_structure(
     lambda x: x, next(iter(loader.clientsData)))
+
+# %%
+NUM_CLIENTS = 10
+NUM_EPOCHS = 10
+BATCH_SIZE = 20
+SHUFFLE_BUFFER = 500
+
+def preprocess(dataset):
+
+  def element_fn(element):
+    return collections.OrderedDict([
+        ('x', train_x),
+        ('y', train_y),
+    ])
+
+  return dataset.repeat(NUM_EPOCHS).map(element_fn).shuffle(
+      SHUFFLE_BUFFER).batch(BATCH_SIZE)
+
 
 # %%
 from tensorflow.compat.v2 import convert_to_tensor
@@ -181,5 +181,32 @@ len(backend.tensorflow_backend._get_available_gpus())
 # %%
 from tensorflow.python.client import device_lib
 print(device_lib.list_local_devices())
+
+
+# %%
+
+# %%
+class FederatedDataLoader:
+    
+    def __init__(self, data_json, clients=10):
+        self.allData = load.load_dataset(data_json)
+        self.clients = clients
+        self.groupClientData()
+    
+    def clientData(self, index):
+        return self.clientsData[index]
+    
+    def groupClientData(self):
+        self.clientsData = []
+        xSplit = self.splitArray(self.allData[0])
+        ySplit = self.splitArray(self.allData[1])
+        
+        for index in range(self.clients):
+            self.clientsData.append([xSplit[index], ySplit[index]])
+
+    def splitArray(self, array):
+        splitLen = len(array)/self.clients
+        return np.array_split(array, splitLen)
+loader = FederatedDataLoader("examples/cinc17/dev.json")
 
 # %%
