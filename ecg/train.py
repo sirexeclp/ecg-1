@@ -15,8 +15,9 @@ import load
 import util
 import json
 from datetime import datetime
+from pathlib import Path
 
-MAX_EPOCHS = 100
+
 
 def make_save_dir(dirname, experiment_name):
     start_time = str(int(time.time())) + '-' + str(random.randrange(1000))
@@ -31,6 +32,10 @@ def get_filename_for_saving(save_dir):
 
 def train(args, params):
 
+    timestamp_log = open(Path(args.log_path) / "timestamps.csv","w",buffering=1)
+    timestamp_log.write(f"timestamp,event,data\n")
+    timestamp_log.write(f"{str(datetime.now())},experiment_begin,\n")
+    
     print(f"Loading training set...{params['train']}")
     train = load.load_dataset(params['train'])
     print("Loading dev set...")
@@ -63,8 +68,7 @@ def train(args, params):
         filepath=get_filename_for_saving(save_dir),
         save_best_only=False)
 
-    timestamp_log = open(f"timestamp_log{str(datetime.now())}.csv","w",buffering=1)
-    timestamp_log.write(f"timestamp,event,data\n")
+
 
     def train_cb(logs):
         #print("log begin")
@@ -107,20 +111,21 @@ def train(args, params):
         model.fit_generator(
             train_gen,
             steps_per_epoch=int(len(train[0]) / batch_size),
-            epochs=MAX_EPOCHS,
+            epochs=args.max_epochs,
             validation_data=dev_gen,
             validation_steps=int(len(dev[0]) / batch_size),
-            callbacks=[checkpointer, reduce_lr, stopping, logger])
+            callbacks=[reduce_lr, logger])
     else:
         train_x, train_y = preproc.process(*train)
         dev_x, dev_y = preproc.process(*dev)
         model.fit(
             train_x, train_y,
             batch_size=batch_size,
-            epochs=MAX_EPOCHS,
+            epochs=args.max_epochs,
             validation_data=(dev_x, dev_y),
-            callbacks=[checkpointer, reduce_lr, stopping, logger])
-
+            callbacks=[reduce_lr, logger])
+    
+    timestamp_log.write(f"{str(datetime.now())},experiment_end,\n")
     timestamp_log.close()
 
 if __name__ == '__main__':
@@ -128,8 +133,12 @@ if __name__ == '__main__':
     parser.add_argument("config_file", help="path to config file")
     parser.add_argument("--experiment", "-e", help="tag with experiment name",
                         default="default")
+    parser.add_argument("--log-path", "-p", help="log-data path",
+                        default="default")
     parser.add_argument("--multi-gpu", "-m", help="enable multi gpu-training",
             action='store', default=False, const=True, nargs="?", type=int)
+    parser.add_argument("--max-epochs", "-n", help="set max number of epochs",
+            action='store', default=100, type=int)
     args = parser.parse_args()
     params = json.load(open(args.config_file, 'r'))
     print(args.multi_gpu)
