@@ -31,11 +31,6 @@ def get_filename_for_saving(save_dir):
             "{val_loss:.3f}-{val_acc:.3f}-{epoch:03d}-{loss:.3f}-{acc:.3f}.hdf5")
 
 def train(args, params):
-
-    timestamp_log = open(Path(args.log_path) / "timestamps.csv","w",buffering=1)
-    timestamp_log.write(f"timestamp,event,data\n")
-    timestamp_log.write(f"{str(datetime.now())},experiment_begin,\n")
-    
     print(f"Loading training set...{params['train']}")
     train = load.load_dataset(params['train'])
     print("Loading dev set...")
@@ -70,21 +65,6 @@ def train(args, params):
 
 
 
-    def train_cb(logs):
-        #print("log begin")
-        timestamp_log.write(f"{str(datetime.now())},train_begin,\n")
-
-    def epoch_cb(epoch,logs):
-        #print("log begin_epoch")
-        timestamp_log.write(f"{str(datetime.now())},epoch_begin,{epoch}\n")
-
-    logger = tensorflow.keras.callbacks.LambdaCallback(
-                on_epoch_begin=epoch_cb ,
-                on_epoch_end=lambda epoch, logs: timestamp_log.write(f"{str(datetime.now())},epoch_end,{epoch}\n"),
-                on_train_begin=train_cb,
-                on_train_end=lambda logs: timestamp_log.write(f"{str(datetime.now())},train_end,\n"),
-                on_batch_begin=lambda epoch, logs: timestamp_log.write(f"{str(datetime.now())},batch_begin,{epoch}\n")   )
-
     batch_size = params.get("batch_size", 32)
 
     if args.multi_gpu:
@@ -114,7 +94,7 @@ def train(args, params):
             epochs=args.max_epochs,
             validation_data=dev_gen,
             validation_steps=int(len(dev[0]) / batch_size),
-            callbacks=[reduce_lr, logger])
+            callbacks=[reduce_lr])
     else:
         train_x, train_y = preproc.process(*train)
         dev_x, dev_y = preproc.process(*dev)
@@ -123,17 +103,13 @@ def train(args, params):
             batch_size=batch_size,
             epochs=args.max_epochs,
             validation_data=(dev_x, dev_y),
-            callbacks=[reduce_lr, logger])
+            callbacks=[reduce_lr])
     
-    timestamp_log.write(f"{str(datetime.now())},experiment_end,\n")
-    timestamp_log.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", help="path to config file")
     parser.add_argument("--experiment", "-e", help="tag with experiment name",
-                        default="default")
-    parser.add_argument("--log-path", "-p", help="log-data path",
                         default="default")
     parser.add_argument("--multi-gpu", "-m", help="enable multi gpu-training",
             action='store', default=False, const=True, nargs="?", type=int)
