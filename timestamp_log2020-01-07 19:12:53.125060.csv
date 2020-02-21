@@ -1,4 +1,0 @@
-timestamp,event,data
-2020-01-07 19:12:53.133340,train_begin,
-2020-01-07 19:12:59.895544,epoch_begin,0
-2020-01-07 19:12:59.896767,batch_begin,0
