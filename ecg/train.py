@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import division
 from __future__ import absolute_import
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 import argparse
 import json
@@ -10,9 +12,9 @@ import os
 import random
 import time
 
-import network
-import load
-import util
+from ecg import network
+from ecg import load
+from ecg import util
 import json
 from datetime import datetime
 from pathlib import Path
@@ -104,7 +106,7 @@ def train(args, params):
             epochs=args.max_epochs,
             validation_data=(dev_x, dev_y),
             callbacks=[reduce_lr])
-    
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -117,5 +119,9 @@ if __name__ == '__main__':
             action='store', default=100, type=int)
     args = parser.parse_args()
     params = json.load(open(args.config_file, 'r'))
+    data_root = Path(args.config_file).parent.absolute()
+    # params["train"] = str((data_root / params["train"]).absolute())
+    # params["dev"] = str((data_root / params["dev"]).absolute())
+    
     print(args.multi_gpu)
     train(args, params)
