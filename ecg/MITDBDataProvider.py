@@ -98,6 +98,18 @@ class MITDBDataProvider():
         for begin, end in zip(splitPoints[:-1], splitPoints[1:]):
             tmp = list(rythmtypes[(rythmtypes["sample"] >= begin)
                                   & (rythmtypes["sample"] <= end)].value)
+            
+            label_count = ((end - begin) // 256)
+            last_label = list(rythmtypes[(rythmtypes["sample"] >= begin)
+                                  & (rythmtypes["sample"] <= end)].value)[0]
+            for l in range(label_count):
+                new_lbl = list(rythmtypes[(rythmtypes["sample"] >= begin+(l*256))
+                                  & (rythmtypes["sample"] <= begin+((l+1)*256))].value)
+                if len(new_lbl) >0:
+                    last_lbl = new_lbl
+                labels.append(last_lbl)
+                print(last_lbl)
+            #print(len(tmp), tmp)
             labels.append(MITDBDataProvider.mostCommon(tmp))
         return labels
 
@@ -162,7 +174,10 @@ class MITDBDataProvider():
 
 # -
 
-def load_database(database_name,data_root= "../data"):
+#get_data_4_fed("/workspace/telemed5000/code/data/")
+
+
+def load_database(database_name,data_root= "../data",record_list=None):
     data_root = Path(data_root)
     assert data_root.exists(), f"data root {data_root} not found!"
     
@@ -170,6 +185,9 @@ def load_database(database_name,data_root= "../data"):
     db_record_names = (db_path / "RECORDS").read_text().splitlines()
     db_annotation_ext = (db_path / "ANNOTATORS").read_text().splitlines()[0].split("\t")[0]
     db_records = []
+    if record_list is not None:
+        print(f"only loading records: {record_list}")
+        db_record_names = record_list
     #print("loading records")
     for record_name in tqdm(db_record_names):
         record_path = db_path / record_name
@@ -191,8 +209,9 @@ def get_one_hot_prepared(mitdb_rec, num_classes = 4):
     other = 2
     # 2 = other
     # 3 = noise
-    mit_annotation_slices = [[annotation_idx.get(x,other) for x in sli] for sli in mit_annotation_slices]
     
+    mit_annotation_slices = [[annotation_idx.get(x,other) for x in sli] for sli in mit_annotation_slices]
+        
     from tensorflow.keras.utils import to_categorical
     num_classes = 4
     mit_annotation_slices = [np.array([to_categorical(x, num_classes) for x in sli])\
@@ -225,8 +244,22 @@ def slpit_slices(x,y,*args,**kwargs):
     return x_train, x_test, y_train, y_test
 
 
-def get_data_4_fed(data_path,test_size=0.33,shuffle=True):
-    mitdb_rec = load_database("mitdb", data_path)
+def get_data_4_fed(data_path,test_size=0.33,shuffle=True, record_list=None):
+    #
+    mitdb_rec = load_database("mitdb", data_path, record_list=record_list)
     x, y = get_one_hot_prepared(mitdb_rec)
     x, y = remove_short_slices(x, y)
+    #print(len(y[0]))
     return slpit_slices(x,y, test_size=test_size,shuffle=shuffle)
+
+
+def get_all_data_flattened(test_size=0.33,shuffle=True, record_list=None):
+    mitdb_rec = load_database("mitdb", data_path, record_list=record_list)
+    x, y = get_one_hot_prepared(mitdb_rec)
+    x, y = remove_short_slices(x, y)
+    return train_test_split(flatten_list(x), flatten_list(y),
+                            test_size=test_size,shuffle=shuffle)
+
+
+
+
