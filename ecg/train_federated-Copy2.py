@@ -176,13 +176,11 @@ class MITFederatedDataLoader:
         return [x_1[:len(x_1)-192] for x_1 in data_chunk]
     
     def prepare_x_train(self, data):
-        return [self.prepare_x(x_1) for x_1 in data]
-    
-    #def clusterPatients(self):
-        
+        return [self.prepare_x(x_1) for x_1 in data]        
         
     def clientData(self, cluster):
         return [np.expand_dims(np.array(self.x_train[cluster]),axis=2), np.array(self.y_train[cluster])]
+
 
 # %%
 file_path = "/workspace/telemed5000/code/data/"

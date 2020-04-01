@@ -43,29 +43,42 @@ import numpy as np
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_score
 
-def f1_score()
+
 
 
 class Metrics(Callback):
+    
+    def __init__(self, num_classes):
+        super().__init__()
+        self.num_classes = num_classes
+    
+    def f1_score(conf_mat, rhythm_type):
+        true_positives = conf_mat[rhythm_type,rhythm_type]
+        sum_reference = conf_mat.sum(axis=1)
+        sum_predicted = conf_mat.sum(axis=0)
+        if (sum_reference + sum_predicted) != 0:
+           return 2 * true_positives / (sum_reference + sum_predicted)
+        else:
+           return None 
+    
     def on_train_begin(self, logs={}):
-        self.val_f1s = []
-        self.val_recalls = []
-        self.val_precisions = []
- 
+        self.history = self.model.history.history
+        self.history["val_f1"] = []
+        self.history["val_conf_mat"] = []
+        
     def on_epoch_end(self, epoch, logs={}):
-        val_predict = (np.asarray(self.model.predict(self.model.validation_data[0]))).round()
-        val_targ = self.model.validation_data[1]
-        val_predict = np.argmax(val_predict, axis=2).reshape(-1)
-        val_targ = np.argmax(val_targ, axis=2).reshape(-1)
-        #print("val_pred", val_predict.shape)
-        #print("val_targ", val_targ.shape)
-        val_f1 = f1_score(val_targ, val_predict, average="weighted")
-        val_recall = recall_score(val_targ, val_predict, average="weighted")
-        val_precision = precision_score(val_targ, val_predict, average="weighted")
-        self.val_f1s.append(val_f1)
-        self.val_recalls.append(val_recall)
-        self.val_precisions.append(val_precision)
-        print("— val_f1: {:.3f} — val_precision: {:.3f} — val_recall {:.3f}".format(val_f1, val_precision, val_recall))
+        val_pred = self.model.predict(self.model.validation_data[0])
+        val_true = self.model.validation_data[1]
+        val_pred = self.model.onehot2index(val_pred)
+        val_true = self.model.onehot2index(val_true)
+        
+        conf_mat = confusion_matrix(y_true=val_true, y_pred=val_pred)
+        scores = [f1_score(conf_mat=conf_mat, rhythm_type=i)
+                     for i in range(self.num_classes)]
+        
+        self.history["val_f1"].append(val_f1)
+        self.history["val_conf_mat"].append(conf_mat)
+        print("— val_f1: {:.3f}".format(val_f1))
 
 
 metrics = Metrics()

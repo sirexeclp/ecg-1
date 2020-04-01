@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+
+# -*- coding: utf-8 -*-
 """
 Created on Mon May 28 17:27:46 2018
 
@@ -15,6 +17,8 @@ from Signal import Signal
 from UnitConverter import TimeUnit, UnitConverter
 from typing import List
 from tqdm import tqdm
+
+STEP = 256
 
 class MITDBDataProvider():
     DEFAULT_SAMPLERATE = 360
@@ -59,16 +63,17 @@ class MITDBDataProvider():
         return splitPoints
 
     @staticmethod
-    def sliceSignal(signal: Signal, sliceLength: int = 60):
+    def sliceSignal(signal: Signal, sliceLength: int = 60, new_sample_rate=DEFAULT_SAMPLERATE):
         """Zerteilt die Aufnahme in gleich Lange (default 60 Sekunden)
         lange Teile.
         signal = Signal Objekt, der Aufnahme
         sliceLength = länge der Teilaufnahmen in Sekunden
         returns: Tuple mit einer Liste der Teilaufnahmen und einer Liste
                 der Stellen an denen gertrennt wurde """
+        signal = signal.resample(new_sample_rate)
         UnitConverter.samplerate = signal.sampleRate
         splitPoints = MITDBDataProvider.calculateSlicePoints(
-            UnitConverter.convert(sliceLength, fromUnit=TimeUnit.Second), len(signal.voltage))
+            sliceLength, len(signal.voltage))
         splitedSignal = np.split(signal.voltage, splitPoints)
         return (splitedSignal, splitPoints)
 
@@ -96,8 +101,7 @@ class MITDBDataProvider():
         splitPoints = np.append(splitPoints, len(signal.voltage))
         labels = []
         for begin, end in zip(splitPoints[:-1], splitPoints[1:]):
-            tmp = list(rythmtypes[(rythmtypes["sample"] >= begin)
-                                  & (rythmtypes["sample"] <= end)].value)
+            tmp = []
             
             label_count = ((end - begin) // 256)
             last_label = list(rythmtypes[(rythmtypes["sample"] >= begin)
@@ -106,11 +110,9 @@ class MITDBDataProvider():
                 new_lbl = list(rythmtypes[(rythmtypes["sample"] >= begin+(l*256))
                                   & (rythmtypes["sample"] <= begin+((l+1)*256))].value)
                 if len(new_lbl) >0:
-                    last_lbl = new_lbl
-                labels.append(last_lbl)
-                print(last_lbl)
-            #print(len(tmp), tmp)
-            labels.append(MITDBDataProvider.mostCommon(tmp))
+                    last_lbl = new_lbl[0]
+                tmp.append(last_lbl)
+            labels.append(tmp)
         return labels
 
     @staticmethod
@@ -174,7 +176,7 @@ class MITDBDataProvider():
 
 # -
 
-#get_data_4_fed("/workspace/telemed5000/code/data/")
+# get_data_4_fed("/workspace/telemed5000/code/data/")
 
 
 def load_database(database_name,data_root= "../data",record_list=None):
@@ -196,32 +198,43 @@ def load_database(database_name,data_root= "../data",record_list=None):
     return db_records
 
 
-def get_one_hot_prepared(mitdb_rec, num_classes = 4):
+def get_one_hot_prepared(mitdb_rec, slice_len, num_classes = 4,fs=300):
     # mit_record_slices = [ MITDBDataProvider.sliceSignal(x,120-0.533333) for x in mitdb_rec]
-    mit_record_slices = [ MITDBDataProvider.sliceSignal(x,120) for x in mitdb_rec]
+    mit_record_slices = [ MITDBDataProvider.sliceSignal(x,slice_len,new_sample_rate=fs) for x in mitdb_rec]
 
-    mit_annotation_slices = [ MITDBDataProvider.sliceAnnotations(x,y) for x,(_,y) in zip(mitdb_rec,mit_record_slices)]
-    mit_annotation_slices = [[x.strip("\x00")[1:] for x in sli] for sli in mit_annotation_slices]
+    mit_annotation_slices = [ MITDBDataProvider.sliceAnnotations(x,y) for x,(_,y) 
+                             in zip(mitdb_rec,mit_record_slices)]
+    mit_annotation_slices = [[[label.strip("\x00")[1:] for label in labels] for labels in slize]
+                             for slize in mit_annotation_slices]
+    
+    
     annotation_idx = {
-        "N":0
-        ,"AFIB":1
+        "AFIB":0
+        ,"N":1
+        ,"~":3
     }
     other = 2
     # 2 = other
     # 3 = noise
     
-    mit_annotation_slices = [[annotation_idx.get(x,other) for x in sli] for sli in mit_annotation_slices]
+    mit_annotation_slices = [[[annotation_idx.get(x,other) for x in sli] for sli in record]
+                             for record in mit_annotation_slices]
         
     from tensorflow.keras.utils import to_categorical
     num_classes = 4
-    mit_annotation_slices = [np.array([to_categorical(x, num_classes) for x in sli])\
-                             for sli in mit_annotation_slices]
+    
+    mit_annotation_slices = [[np.array([to_categorical(x, num_classes) for x in sli])\
+                             for sli in rec] for rec in mit_annotation_slices]
     
     return mit_record_slices, mit_annotation_slices
 
 
-def remove_short_slices(mit_record_slices, mit_annotation_slices, length = 43200):
-    mit_record_slices = [[x for x in rec[0] if len(x)==43200] for rec in mit_record_slices]
+def remove_short_slices(mit_record_slices, mit_annotation_slices, length):
+    #length_int = UnitConverter.convert(length, fromUnit=TimeUnit.Second)
+    #trunc_samp = STEP * (length_int // STEP)
+    #mit_record_slices = []
+    mit_record_slices = [[x for x in rec[0] if len(x)==length] for rec in mit_record_slices]
+    
     mit_annotation_slices = [[y for x,y in zip(sli_x, sli_y) ]
                              for sli_x, sli_y in zip(mit_record_slices, mit_annotation_slices)]
     return mit_record_slices, mit_annotation_slices
@@ -237,29 +250,38 @@ from sklearn.model_selection import train_test_split
 def slpit_slices(x,y,*args,**kwargs):
     splitted = [train_test_split(rec_x, rec_y,*args,**kwargs) 
                                  for rec_x, rec_y in zip(x, y)]
-    x_train = [x[0] for x in splitted]
-    x_test = flatten_list([x[1] for x in splitted])
-    y_train = [x[2] for x in splitted]
-    y_test = flatten_list([x[3] for x in splitted])
+    x_train, x_test, y_train, y_test =  zip(*splitted)
+    x_test = np.array(flatten_list(x_test))
+    y_test = np.array(flatten_list(y_test))
+    
+    #x_train = [x[0] for x in splitted]
+    #x_test = flatten_list([x[1] for x in splitted])
+    #y_train = [x[2] for x in splitted]
+    #y_test = flatten_list([x[3] for x in splitted])
     return x_train, x_test, y_train, y_test
 
 
 def get_data_4_fed(data_path,test_size=0.33,shuffle=True, record_list=None):
     #
     mitdb_rec = load_database("mitdb", data_path, record_list=record_list)
-    x, y = get_one_hot_prepared(mitdb_rec)
-    x, y = remove_short_slices(x, y)
-    #print(len(y[0]))
-    return slpit_slices(x,y, test_size=test_size,shuffle=shuffle)
+    slice_len = 8960
+    x, y = get_one_hot_prepared(mitdb_rec,slice_len=slice_len)
+    
+    x, y = remove_short_slices(x, y, slice_len)
+    return slpit_slices(x,y, test_size=test_size,shuffle=shuffle,random_state=42)
 
 
-def get_all_data_flattened(test_size=0.33,shuffle=True, record_list=None):
-    mitdb_rec = load_database("mitdb", data_path, record_list=record_list)
-    x, y = get_one_hot_prepared(mitdb_rec)
-    x, y = remove_short_slices(x, y)
-    return train_test_split(flatten_list(x), flatten_list(y),
-                            test_size=test_size,shuffle=shuffle)
+def get_all_data_flattened(data_path,test_size=0.33,shuffle=True, record_list=None):
+    pass
+    #mitdb_rec = load_database("mitdb", data_path, record_list=record_list)
+    #x, y = get_one_hot_prepared(mitdb_rec)
+    #x, y = remove_short_slices(x, y)
+    #return train_test_split(flatten_list(x), flatten_list(y),
+    #                        test_size=test_size,shuffle=shuffle)
 
 
+if __name__ == "__main__":
+    records = ["201", "202", "203", "219", "222"]
+    get_data_4_fed("/workspace/telemed5000/code/data/", record_list=records)
 
 

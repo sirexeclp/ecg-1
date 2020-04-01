@@ -25,6 +25,11 @@ def data_generator(batch_size, preproc, x, y):
             x, y = zip(*batch)
             yield preproc.process(x, y)
 
+
+def mode(x):
+    return np.bincount(x).argmax()
+
+
 class Preproc:
 
     def __init__(self, ecg, labels):
@@ -50,10 +55,16 @@ class Preproc:
         return y
 
 def pad(x, val=0, dtype=np.float32):
-    max_len = max(len(i) for i in x)
-    padded = np.full((len(x), max_len), val, dtype=dtype)
+    lengths = [len(i) for i in x]
+    mode_len = mode(lengths)
+    count_ge_mode = np.sum(np.bincount(lengths)[mode_len:])
+    
+    padded = np.full((len(x), mode_len), val, dtype=dtype)
     for e, i in enumerate(x):
-        padded[e, :len(i)] = i
+        current_len = min(len(i), mode_len)
+        padded[e, :current_len] = i[:current_len]
+
+    #[i[:mode_len] for i in x if len(i) >= mode_len]
     return padded
 
 def compute_mean_std(x):

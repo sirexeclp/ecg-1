@@ -450,7 +450,7 @@ class FederatedModel():
     
     def fit(self, max_epochs=100, locale_epochs=1):
         
-        self.data_loader.save_test()
+        #self.data_loader.save_test()
         
         self.history = []
         for epoch in range(max_epochs):
